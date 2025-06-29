@@ -1,52 +1,87 @@
 #!/usr/bin/env python3
 """
 Test script that simulates a developer answering questions and evaluates the result
+Uses the new conversational system with realistic project environments
 """
 import os
 from prompt_builder.core import interactive_interview, generate_prompt
-from prompt_builder.schema import Profile, MIN_FIELDS
-from prompt_builder.planner import choose_field_llm
+from prompt_builder.conversation import conduct_conversation, ConversationState, generate_next_question
 from prompt_builder.llm import chat
-from prompt_builder.prompts import render_fallback_question
 from prompt_builder.vendors import write_vendor_output, get_available_vendors
+from test_environments import get_mock_project_context, get_project_summary_for_persona
 
 class DeveloperSimulator:
-    def __init__(self, developer_profile):
-        self.profile_data = developer_profile
+    def __init__(self, role_description, persona_name):
+        self.role_description = role_description
+        self.persona_name = persona_name
+        self.conversation_history = []
         
     def answer_question(self, field, question):
-        """Simulate answering a question based on the developer profile"""
-        return self.profile_data.get(field, f"I'm not sure about {field}")
+        """Simulate answering a question by having LLM roleplay as the developer"""
+        
+        # Build conversation context
+        context = "\n".join([f"Q: {q}\nA: {a}" for q, a in self.conversation_history])
+        
+        system_prompt = f"""You are roleplaying as: {self.role_description}
 
-def automated_interview(developer_profile):
-    """Run the interview process automatically using simulated answers"""
-    simulator = DeveloperSimulator(developer_profile)
-    profile = Profile()
-    
-    print("🤖 Starting automated interview simulation...")
-    print(f"Simulating developer: {developer_profile.get('role', 'Unknown')}")
-    print("-" * 50)
-    
-    while True:
-        missing = [f for f in MIN_FIELDS if getattr(profile, f) is None]
-        if not missing:
-            break
+Answer the following question naturally as this person would, considering:
+- Your background, experience level, and current situation
+- Your personality, work style, and preferences
+- The conversation context so far
+- Be authentic and specific to your role
+
+Keep answers conversational and realistic (1-2 sentences usually)."""
+
+        user_prompt = f"""Previous conversation:
+{context}
+
+Current question: {question}
+
+Answer as {self.persona_name}:"""
 
         try:
-            field, question = choose_field_llm(profile.dict(), missing)
-            print(f"🤔 LLM asks: {question}")
+            answer = chat(system_prompt, user_prompt)
+            # Store in conversation history
+            self.conversation_history.append((question, answer))
+            return answer.strip()
         except Exception as e:
-            field = missing[0]
-            question = render_fallback_question(field)
-            print(f"🤔 Fallback question: {question}")
+            # Fallback to simple response
+            fallback = f"I'm not sure about that specific detail."
+            self.conversation_history.append((question, fallback))
+            return fallback
+
+def automated_interview(developer_profile, persona_name):
+    """Run the conversational interview process automatically using simulated answers"""
+    simulator = DeveloperSimulator(developer_profile["description"], developer_profile["name"])
+    
+    # Get mock project context for this persona
+    project_context = get_mock_project_context(persona_name)
+    project_summary = get_project_summary_for_persona(persona_name)
+    
+    print("🤖 Starting automated conversational interview...")
+    print(f"Simulating developer: {developer_profile['name']} ({developer_profile.get('description', 'Unknown')[:60]}...)")
+    print(f"📁 Project context: {project_summary}")
+    print("-" * 50)
+    
+    # Create conversation state with project context
+    conversation = ConversationState(project_context)
+    
+    # Simulate the conversation
+    while conversation.should_continue():
+        try:
+            question = generate_next_question(conversation)
+            print(f"🤔 System: {question}")
+        except Exception as e:
+            print(f"🤔 Fallback: What brings you to use this coding assistant today?")
+            question = "What brings you to use this coding assistant today?"
         
-        answer = simulator.answer_question(field, question)
-        print(f"👨‍💻 Developer answers: {answer}")
+        answer = simulator.answer_question("conversation", question)
+        print(f"👨‍💻 {developer_profile['name']}: {answer}")
         print()
         
-        setattr(profile, field, answer)
+        conversation.add_exchange(question, answer)
 
-    return profile
+    return conversation
 
 def evaluate_prompt(original_profile, generated_prompt):
     """Use an LLM to evaluate how well the prompt matches the developer"""
@@ -80,149 +115,84 @@ def evaluate_prompt(original_profile, generated_prompt):
     
     return chat(evaluation_system, evaluation_user)
 
-# Test developer profiles
+# Test developer personas - now defined as role descriptions for LLM roleplay
 TEST_DEVELOPERS = {
     "senior_fullstack": {
-        "intended_use": "Daily coding workflow, code reviews, and architectural decisions",
-        "primary_languages": "TypeScript, Python, Go",
-        "coding_style": "Standard conventions, prefer functional patterns, strict TypeScript config",
-        "testing_approach": "Jest for TS, pytest for Python, 90% coverage minimum, TDD preferred",
-        "tooling_preferences": "VS Code, Docker for dev, GitHub Actions for CI",
-        "workflow_process": "Feature branch → Tests first → Implementation → PR review → Merge",
-        "current_project": "Building a microservices architecture for e-commerce platform", 
-        "experience_level": "Senior (8+ years)"
+        "description": "A senior full-stack developer with 8+ years of experience. You work at a tech company building microservices for e-commerce. You're pragmatic, value clean code and testing, prefer TypeScript/Python/Go. You're experienced with code reviews, mentoring junior developers, and making architectural decisions. You care about best practices but are flexible when deadlines matter.",
+        "name": "Alex"
     },
     
     "junior_frontend": {
-        "intended_use": "Learning new concepts and debugging help while coding",
-        "primary_languages": "JavaScript, HTML, CSS, React",
-        "coding_style": "Following Prettier/ESLint, learning component patterns",
-        "testing_approach": "Just started with basic unit tests, no TDD yet",
-        "current_project": "Learning React and building portfolio website",
-        "experience_level": "Junior (1-2 years)",
-        "common_tasks": "Component development, styling, debugging, learning new frameworks"
+        "description": "A junior frontend developer with 1-2 years of experience. You're still learning React and building your portfolio website. You're enthusiastic but sometimes overwhelmed by all the tools and frameworks. You follow tutorials, ask lots of questions, and are trying to understand best practices. You know HTML/CSS/JavaScript basics and are learning modern development workflows.",
+        "name": "Sam"
     },
     
-    "data_scientist": {
-        "intended_use": "Data analysis, model prototyping, and statistical exploration",
-        "role": "Data Scientist",
-        "experience_level": "Mid-level (4 years)",
-        "primary_languages": "Python, R, SQL",
-        "current_project": "Machine learning model for customer churn prediction", 
-        "preferred_style": "Mathematical explanations with practical implementation",
-        "common_tasks": "Data analysis, model training, visualization, statistical testing"
-    },
     
     "computer_science_student": {
-        "intended_use": "Homework help, learning programming concepts, and project guidance",
-        "role": "Computer Science Student",
-        "experience_level": "Beginner (6 months)",
-        "primary_languages": "Java, Python, C++",
-        "current_project": "Final semester project building a web-based student management system",
-        "preferred_style": "Patient explanations with learning resources and practice exercises",
-        "common_tasks": "Learning algorithms, homework assignments, debugging code, understanding concepts"
+        "description": "A computer science student in your final semester with about 6 months of programming experience. You're working on a web-based student management system for your capstone project. You know Java, Python, and C++ from classes but are still learning practical development. You want patient explanations, learning resources, and help understanding concepts.",
+        "name": "Casey"
     },
     
-    "hobbyist_parent": {
-        "intended_use": "Weekend hobby projects and learning web development in spare time",
-        "role": "Parent/Homemaker with Programming Hobby",
-        "experience_level": "Self-taught beginner (2 years on and off)",
-        "primary_languages": "Python, HTML/CSS, JavaScript",
-        "current_project": "Building a family expense tracker app in spare time",
-        "preferred_style": "Simple explanations that fit into busy schedule, bite-sized learning",
-        "common_tasks": "Weekend coding projects, following tutorials, automating household tasks, learning web development"
+    "curious_beginner": {
+        "description": "A curious but inexperienced developer who genuinely wants to learn and improve. You have about 8 months of coding experience and are excited about understanding how things work. You're working on a personal blog platform to practice and learn. You love asking 'why' and want to understand best practices, not just copy code. You prefer explanations that help you grow as a developer.",
+        "name": "Alex"
+    },
+    
+    "emergency_manager": {
+        "description": "A project manager whose only developer is on vacation and you need to fix a critical bug in the company's customer portal. You have zero programming experience but the business is losing money every hour this is broken. You just need step-by-step instructions to get it working again - you're not trying to become a programmer, just solve this one crisis.",
+        "name": "Sam"
     },
     
     "devops_engineer": {
-        "intended_use": "Infrastructure automation, CI/CD pipeline management, and incident response",
-        "primary_languages": "Python, Bash, YAML, Go",
-        "coding_style": "Infrastructure as Code, declarative configs, immutable deployments",
-        "testing_approach": "Infrastructure testing with Terratest, pipeline validation, smoke tests",
-        "current_project": "Migrating legacy applications to Kubernetes and implementing GitOps workflows",
-        "experience_level": "Mid-level (5 years)",
-        "common_tasks": "Infrastructure as code, deployment automation, monitoring setup, troubleshooting production issues"
+        "description": "A mid-level DevOps engineer with 5 years of experience. You're migrating legacy applications to Kubernetes and implementing GitOps workflows. You write Python, Bash, YAML, and some Go. You think in terms of infrastructure as code, automation, and reliability. You're always dealing with production issues and care about monitoring and observability.",
+        "name": "Morgan"
     },
     
     "mobile_developer": {
-        "intended_use": "Cross-platform mobile app development and performance optimization",
-        "role": "Mobile Developer",
-        "experience_level": "Senior (6 years)",
-        "primary_languages": "Swift, Kotlin, Flutter/Dart, React Native",
-        "current_project": "Building a fitness tracking app with real-time analytics and offline sync",
-        "preferred_style": "Code examples with performance considerations and best practices",
-        "common_tasks": "UI/UX implementation, API integration, performance optimization, app store deployment"
+        "description": "A senior mobile developer with 6 years of experience. You're building a fitness tracking app with real-time analytics and offline sync. You work with Swift, Kotlin, Flutter, and React Native. You care deeply about performance, user experience, and app store guidelines. You're always thinking about battery life, memory usage, and cross-platform compatibility.",
+        "name": "Taylor"
     },
     
     "freelance_consultant": {
-        "intended_use": "Client project delivery, rapid prototyping, and technical consultation",
-        "role": "Freelance Technical Consultant",
-        "experience_level": "Expert (12+ years)",
-        "primary_languages": "JavaScript, Python, PHP, Java",
-        "current_project": "Architecting e-commerce platform for mid-size retail client",
-        "preferred_style": "Efficient solutions that balance quality with time constraints",
-        "common_tasks": "Requirements gathering, system architecture, client communication, rapid development"
+        "description": "A freelance technical consultant with 12+ years of experience. You're currently architecting an e-commerce platform for a mid-size retail client. You work with JavaScript, Python, PHP, and Java depending on client needs. You balance quality with time constraints, communicate with non-technical stakeholders, and need to deliver quickly while managing multiple projects.",
+        "name": "Avery"
     },
     
     "security_engineer": {
-        "intended_use": "Security analysis, vulnerability assessment, and secure code review",
-        "primary_languages": "Python, C++, JavaScript, SQL",
-        "coding_style": "Secure coding practices, OWASP guidelines, defensive programming",
-        "testing_approach": "Security-focused testing: SAST, DAST, penetration testing, fuzzing",
-        "current_project": "Implementing zero-trust security architecture for fintech company",
-        "experience_level": "Senior (7 years)",
-        "common_tasks": "Threat modeling, penetration testing, security audits, incident response"
+        "description": "A senior security engineer with 7 years of experience. You're implementing zero-trust security architecture for a fintech company. You work with Python, C++, JavaScript, and SQL, always thinking about threats and vulnerabilities. You follow OWASP guidelines, do penetration testing, and review code for security issues. You're paranoid by nature and always thinking about what could go wrong.",
+        "name": "Cameron"
     },
     
     "startup_cto": {
-        "intended_use": "Technical leadership, architectural decisions, and team mentoring",
-        "primary_languages": "TypeScript, Python, Go, Rust",
-        "coding_style": "Pragmatic architecture, microservices, event-driven design",
-        "testing_approach": "Balanced approach: critical path TDD, integration tests, minimal viable testing",
-        "current_project": "Building MVP for AI-powered SaaS platform while scaling engineering team",
-        "experience_level": "Expert (10+ years)",
-        "common_tasks": "Technology strategy, team building, investor presentations, hands-on coding when needed"
+        "description": "A startup CTO with 10+ years of experience. You're building an MVP for an AI-powered SaaS platform while scaling your engineering team. You work with TypeScript, Python, Go, and Rust. You make technology strategy decisions, present to investors, mentor your team, but still code when needed. You balance technical debt with speed to market and are always thinking about scalability.",
+        "name": "Quinn"
     }
 }
 
 def show_dialog(developer_name, developer_data):
-    """Show the interview as a User-System dialog"""
+    """Show the conversational interview as a User-System dialog"""
     print(f"\n{'='*80}")
-    print(f"🎯 {developer_name.upper().replace('_', ' ')}")
+    print(f"🎯 {developer_name.upper().replace('_', ' ')} ({developer_data['name']})")
     print(f"{'='*80}")
     
-    simulator = DeveloperSimulator(developer_data)
-    profile = Profile()
+    project_summary = get_project_summary_for_persona(developer_name)
+    print(f"📁 Project context: {project_summary}")
+    print()
     
-    while True:
-        missing = [f for f in MIN_FIELDS if getattr(profile, f) is None]
-        if not missing:
-            break
-
-        try:
-            field, question = choose_field_llm(profile.dict(), missing)
-            print(f"\n🤖 System: {question}")
-        except Exception as e:
-            field = missing[0]
-            question = render_fallback_question(field)
-            print(f"\n🤖 System: {question}")
-        
-        answer = simulator.answer_question(field, question)
-        print(f"👨‍💻 User: {answer}")
-        
-        setattr(profile, field, answer)
+    conversation = automated_interview(developer_data, developer_name)
 
     # Generate and display the final prompt
     print(f"\n{'='*80}")
     print("📝 GENERATED PROMPT:")
     print(f"{'='*80}")
     
-    generated_prompt = generate_prompt(profile)
+    generated_prompt = generate_prompt(conversation)
     print(generated_prompt)
     print(f"{'='*80}")
     
-    return profile, generated_prompt
+    return conversation, generated_prompt
 
-def run_test(developer_name, show_dialog_flag=False, show_prompt_flag=False, output_vendor=None):
+def run_test(developer_name, show_dialog_flag=False, show_prompt_flag=False, show_review_flag=False, output_vendor=None):
     """Run complete test for a specific developer profile"""
     if developer_name not in TEST_DEVELOPERS:
         print(f"❌ Unknown developer: {developer_name}")
@@ -233,27 +203,11 @@ def run_test(developer_name, show_dialog_flag=False, show_prompt_flag=False, out
     
     if show_dialog_flag:
         # Show dialog
-        profile, generated_prompt = show_dialog(developer_name, developer_data)
+        conversation, generated_prompt = show_dialog(developer_name, developer_data)
     else:
         # Generate without showing dialog
-        simulator = DeveloperSimulator(developer_data)
-        profile = Profile()
-        
-        while True:
-            missing = [f for f in MIN_FIELDS if getattr(profile, f) is None]
-            if not missing:
-                break
-
-            try:
-                field, question = choose_field_llm(profile.dict(), missing)
-            except Exception as e:
-                field = missing[0]
-                question = render_fallback_question(field)
-            
-            answer = simulator.answer_question(field, question)
-            setattr(profile, field, answer)
-        
-        generated_prompt = generate_prompt(profile)
+        conversation = automated_interview(developer_data, developer_name)
+        generated_prompt = generate_prompt(conversation)
     
     # Handle vendor output
     if output_vendor:
@@ -274,15 +228,20 @@ def run_test(developer_name, show_dialog_flag=False, show_prompt_flag=False, out
         print(generated_prompt)
         print(f"{'='*80}")
     
-    # Always show evaluation
-    if show_dialog_flag or show_prompt_flag:
-        print("🔍 Evaluating prompt quality...")
+    # Show evaluation
+    if show_dialog_flag or show_prompt_flag or show_review_flag:
+        if not show_review_flag:  # Don't show this message for review-only mode
+            print("🔍 Evaluating prompt quality...")
         evaluation = evaluate_prompt(developer_data, generated_prompt)
         
-        print("📊 Evaluation Results:")
-        print("-" * 30)
-        print(evaluation)
-        print("-" * 30)
+        if show_review_flag:
+            # Review-only mode: just output the evaluation
+            print(evaluation)
+        else:
+            print("📊 Evaluation Results:")
+            print("-" * 30)
+            print(evaluation)
+            print("-" * 30)
 
 def main():
     import sys
@@ -291,6 +250,7 @@ def main():
     args = sys.argv[1:]
     show_dialog = False
     show_prompt = False
+    show_review = False
     output_vendor = None
     developer_name = None
     
@@ -307,6 +267,10 @@ def main():
     if "-p" in args or "--prompt" in args:
         show_prompt = True
         args = [arg for arg in args if arg not in ["-p", "--prompt"]]
+    
+    if "-r" in args or "--review" in args:
+        show_review = True
+        args = [arg for arg in args if arg not in ["-r", "--review"]]
     
     # Parse vendor output flag
     for i, arg in enumerate(args):
@@ -325,6 +289,7 @@ def main():
         print("  -v, --verbose              Show dialog + prompt (equivalent to -dp)")
         print("  -d, --dialog               Show User-System dialog only")
         print("  -p, --prompt               Show generated prompt only")
+        print("  -r, --review               Show evaluation/review only")
         print("  -o, --output-format <fmt>  Write to vendor-specific file")
         print("  (no flags)                 Show evaluation only")
         print()
@@ -334,7 +299,7 @@ def main():
         return
     
     developer_name = args[0]
-    run_test(developer_name, show_dialog, show_prompt, output_vendor)
+    run_test(developer_name, show_dialog, show_prompt, show_review, output_vendor)
 
 if __name__ == "__main__":
     main()
