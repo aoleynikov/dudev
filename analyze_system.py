@@ -23,16 +23,16 @@ import time
 ALL_PERSONAS = [
     'senior_fullstack', 'junior_frontend', 'computer_science_student', 
     'curious_beginner', 'emergency_manager', 'devops_engineer', 'mobile_developer', 
-    'freelance_consultant', 'security_engineer', 'startup_cto'
+    'freelance_consultant', 'security_engineer', 'startup_cto', 'data_scientist'
 ]
 
 # Predefined persona groups
 PERSONA_GROUPS = {
     "beginners": ["computer_science_student", "junior_frontend", "curious_beginner"],
     "necessity": ["emergency_manager"],  # Pure necessity-driven users
-    "intermediate": ["devops_engineer", "mobile_developer", "freelance_consultant"],
+    "intermediate": ["devops_engineer", "mobile_developer", "freelance_consultant", "data_scientist"],
     "advanced": ["senior_fullstack", "security_engineer", "startup_cto"],
-    "technical": ["senior_fullstack", "devops_engineer", "security_engineer"],
+    "technical": ["senior_fullstack", "devops_engineer", "security_engineer", "data_scientist"],
     "frontend": ["junior_frontend", "senior_fullstack", "freelance_consultant"],
     "motivation_test": ["curious_beginner", "emergency_manager"],  # Test both motivation types
     "quick": ["senior_fullstack", "curious_beginner", "emergency_manager"]  # For faster testing

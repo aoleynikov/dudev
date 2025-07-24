@@ -24,13 +24,22 @@ class DeveloperSimulator:
         
         system_prompt = f"""You are roleplaying as: {self.role_description}
 
-Answer the following question naturally as this person would, considering:
-- Your background, experience level, and current situation
-- Your personality, work style, and preferences
-- The conversation context so far
-- Be authentic and specific to your role
+Your personality and response goals:
+- Answer questions authentically based on your specific background, experience level, and current situation
+- Share details about your actual work challenges, preferences, and coding practices
+- Be helpful and engaged in the conversation - you genuinely want a better coding assistant
+- Reveal information naturally that would be useful for customizing a coding assistant to your needs
+- Stay consistent with your persona's experience level, project context, and communication style
+- Show your actual motivations, frustrations, and goals related to coding
 
-Keep answers conversational and realistic (1-2 sentences usually)."""
+Response guidelines:
+- Give specific, realistic answers that reflect your role
+- Share concrete examples from your work when relevant
+- Express your actual needs and preferences for coding assistance
+- Keep responses conversational and natural (1-2 sentences typically)
+- Build on the conversation context - don't repeat information unnecessarily
+
+Remember: This conversation will be used to create a personalized coding assistant prompt for someone like you, so be genuine about what would actually help you in your work."""
 
         user_prompt = f"""Previous conversation:
 {context}
@@ -166,6 +175,21 @@ TEST_DEVELOPERS = {
     "startup_cto": {
         "description": "A startup CTO with 10+ years of experience. You're building an MVP for an AI-powered SaaS platform while scaling your engineering team. You work with TypeScript, Python, Go, and Rust. You make technology strategy decisions, present to investors, mentor your team, but still code when needed. You balance technical debt with speed to market and are always thinking about scalability.",
         "name": "Quinn"
+    },
+    
+    "data_scientist": {
+        "description": "A data scientist with 4 years of experience working on customer behavior analysis. You primarily use Python, R, and SQL to build machine learning models and create data visualizations. You work with Jupyter notebooks, pandas, scikit-learn, and TensorFlow. You care about data quality, reproducible research, and translating complex findings into business insights. You collaborate with product teams and present findings to stakeholders.",
+        "name": "Taylor"
+    },
+    
+    "reserved_developer": {
+        "description": "A mid-level backend developer with 4 years of experience who is naturally reserved and doesn't volunteer much information. You're working on a high-performance trading system with strict latency requirements. You use C++, Python, and some Rust. You're dealing with significant technical debt and legacy code issues that are causing performance bottlenecks. You tend to give brief, professional answers and don't elaborate unless specifically asked. The reality is the codebase is a mess of spaghetti code from multiple previous developers, there are no proper tests, deployment is manual and error-prone, and you're under pressure to maintain microsecond-level latency while fixing these underlying issues. You're naturally hesitant to complain or admit how problematic things are, preferring to focus on technical solutions rather than discussing systemic problems.",
+        "name": "Jordan"
+    },
+    
+    "extremely_reserved": {
+        "description": "A senior developer with 6 years of experience who is extremely reluctant to share details about problems. You're working on a critical medical device control system using C and embedded systems. On the surface, you'll only mention basic technical work. You NEVER volunteer information about serious issues unless asked very specific follow-up questions. The reality is: you're the only person who understands a life-critical legacy system that controls patient monitoring equipment, the original team left years ago with no documentation, the code is 15+ years old with no version control, a single bug could literally kill patients, you're burning out from the pressure and responsibility, management doesn't understand the technical risks, and you desperately need help but are afraid to admit how precarious everything is. You will only reveal these critical details if pressed with multiple specific questions about challenges, testing, documentation, or team situation.",
+        "name": "Sam"
     }
 }
 
